@@ -1974,9 +1974,10 @@ SELECT * FROM T WHERE field1 >= ？ OR field2 >= ？;
 * cursor转化成A.
 
 #### 37. 用过原生的http包吗？
+
 Golang中http包中处理 HTTP 请求主要跟两个东西相关：ServeMux 和 Handler。
 
-ServrMux 本质上是一个 HTTP 请求路由器（或者叫多路复用器，Multiplexor）。它把收到的请求与一组预先定义的 URL 路径列表做对比，然后在匹配到路径的时候调用关联的处理器（Handler）。
+ServeMux 本质上是一个 HTTP 请求路由器（或者叫多路复用器，Multiplexor）。它把收到的请求与一组预先定义的 URL 路径列表做对比，然后在匹配到路径的时候调用关联的处理器（Handler）。
 
 处理器（Handler）负责输出HTTP响应的头和正文。任何满足了http.Handler接口的对象都可作为一个处理器。通俗的说，对象只要有个如下签名的ServeHTTP方法即可：
 ```go
@@ -3335,12 +3336,115 @@ func main() {
     }
 }
 ```
-
 #### 61. 实现set
 
 根据go中map的keys的无序性和唯一性，可以将其作为set
+```go
+package main
 
-* [golang实现set集合,变相实现切片去重](https://studygolang.com/articles/3291)
+import (
+	"fmt"
+	"sort"
+	"sync"
+)
+
+type Set struct {
+	m map[int]bool
+	sync.RWMutex
+}
+
+func New() *Set {
+	return &Set{
+		m: map[int]bool{},
+	}
+}
+
+func (s *Set) Add(item int) {
+	s.Lock()
+	defer s.Unlock()
+	s.m[item] = true
+}
+
+func (s *Set) Remove(item int) {
+	s.Lock()
+	defer s.Unlock()
+	delete(s.m, item)
+}
+
+func (s *Set) Has(item int) bool {
+	s.RLock()
+	defer s.RUnlock()
+	_, ok := s.m[item]
+	return ok
+}
+
+func (s *Set) Len() int {
+	return len(s.List())
+}
+
+func (s *Set) Clear() {
+	s.Lock()
+	defer s.Unlock()
+	s.m = map[int]bool{}
+}
+
+func (s *Set) IsEmpty() bool {
+	if s.Len() == 0 {
+		return true
+	}
+	return false
+}
+
+func (s *Set) List() []int {
+	s.RLock()
+	defer s.RUnlock()
+	list := []int{}
+	for item := range s.m {
+		list = append(list, item)
+	}
+	return list
+}
+func (s *Set) SortList() []int {
+	s.RLock()
+	defer s.RUnlock()
+	list := []int{}
+	for item := range s.m {
+		list = append(list, item)
+	}
+	sort.Ints(list)
+	return list
+}
+
+func main() {
+	//初始化
+	s := New()
+
+	s.Add(1)
+	s.Add(1)
+	s.Add(0)
+	s.Add(2)
+	s.Add(4)
+	s.Add(3)
+
+	s.Clear()
+	if s.IsEmpty() {
+		fmt.Println("0 item")
+	}
+
+	s.Add(1)
+	s.Add(2)
+	s.Add(3)
+
+	if s.Has(2) {
+		fmt.Println("2 does exist")
+	}
+
+	s.Remove(2)
+	s.Remove(3)
+	fmt.Println("无序的切片", s.List())
+	fmt.Println("有序的切片", s.SortList())
+}
+```
 
 #### 62. 实现消息队列（多生产者，多消费者）
 
@@ -3370,11 +3474,11 @@ head: 除了服务器不能在响应中返回消息体，HEAD方法与GET相同�
 
 #### 66. Http 401,403
 
-**401 Unauthorized**： 该HTTP状态码表示认证错误，它是为了认证设计的，而不是为了授权设计的。收到401响应，**表示请求没有被认证—压根没有认证或者认证不正确—但是请重新认证和重试。**（一般在响应头部包含一个*WWW-Authenticate*来描述如何认证）。通常由web服务器返回，而不是web应用。从性质上来说是临时的东西。（服务器要求客户端重试）
+* 401 Unauthorized： 该HTTP状态码表示认证错误，它是为了认证设计的，而不是为了授权设计的。收到401响应，**表示请求没有被认证—压根没有认证或者认证不正确—但是请重新认证和重试。**（一般在响应头部包含一个*WWW-Authenticate*来描述如何认证）。通常由web服务器返回，而不是web应用。从性质上来说是临时的东西。（服务器要求客户端重试）
 
-**403 Forbidden**：该HTTP状态码是关于授权方面的。从性质上来说是永久的东西，和应用的业务逻辑相关联。它比401更具体，更实际。收到403响应表示**服务器完成认证过程，但是客户端请求没有权限去访问要求的资源。**
+* 403 Forbidden：该HTTP状态码是关于授权方面的。从性质上来说是永久的东西，和应用的业务逻辑相关联。它比401更具体，更实际。收到403响应表示**服务器完成认证过程，但是客户端请求没有权限去访问要求的资源。**
 
-总的来说，**401 Unauthorized**响应应该用来表示缺失或错误的认证；**403 Forbidden**响应应该在这之后用，当用户被认证后，但用户没有被授权在特定资源上执行操作。
+因此，**401 Unauthorized**响应应该用来表示缺失或错误的认证；**403 Forbidden**响应应该在这之后用，当用户被认证后，但用户没有被授权在特定资源上执行操作。
 
 * [HTTP响应码403 Forbidden和401 Unauthorized对比](https://www.jianshu.com/p/6dceeebbde5b)
 
@@ -3636,7 +3740,6 @@ func quickDescendingSort(arr []int, start, end int) {
 5. 尽管能够符合分配到栈的场景，但是其大小不能够在在编译时候确定的情况，也会分配到堆上
 
 有效的避免上述的五种逃逸的情况,可以避免内存逃逸.
-
 
 #### 91. 配置中心如何保证一致性？
 
@@ -4310,6 +4413,24 @@ func isValid(root *TreeNode, min, max int) bool {
 }
 
 ```
+113. Go调度相关的整个过程熟悉吗?
+
+* Go的调度为什么说是轻量的?
+* Go调度都发生了了啥?
+* Go的网络和锁会不不会阻塞线程?
+* 什么时候会阻塞线程?	
+* Go的对象在内存中是怎样的?
+* Go的内存分配是怎样的?
+* 栈的内存是怎么分配的?			
+* GC是怎样的?
+* GC怎么帮我们回收对象?
+* Go的GC会不会漏掉对象或者回收还在⽤的对象?
+* Go GC什么时候开始?
+* Go GC啥时候结束?
+* Go GC会不会太慢, 跟不上内存分配的速度?
+* Go GC会不会暂停我们的应用? 暂停多久? 影不影响我的请求?
+
+114. Mysql分区表的数量限制和需要注意的地方?
 
 
 #### Golang面试参考
