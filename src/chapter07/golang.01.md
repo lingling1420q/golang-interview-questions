@@ -1,11 +1,54 @@
+### Go的堆栈
+
+在理解Go的堆栈分配前,我们先理解下什么是堆栈？在计算机中堆栈的概念分为：数据结构的堆栈和内存分配中堆栈。
+
+数据结构的堆栈：
+
+堆：堆可以被看成是一棵树，如：堆排序。在队列中，调度程序反复提取队列中第一个作业并运行，因为实际情况中某些时间较短的任务将等待很长时间才能结束，或者某些不短小，但具有重要性的作业，同样应当具有优先权。堆即为解决此类问题设计的一种数据结构。
+
+栈：一种先进后出的数据结构。
+
+在内存分配中的堆和栈:
+
+栈（操作系统）：由操作系统自动分配释放 ，存放函数的参数值，局部变量的值等。其操作方式类似于数据结构中的栈。
+
+堆（操作系统）： 一般由程序员分配释放， 若程序员不释放，程序结束时可能由OS回收，分配方式倒是类似于链表。
+
+#### 堆栈缓存方式
+
+栈使用的是一级缓存， 他们通常都是被调用时处于存储空间中，调用完毕立即释放。
+
+堆则是存放在二级缓存中，生命周期由虚拟机的垃圾回收算法来决定（并不是一旦成为孤儿对象就能被回收）。所以调用这些对象的速度要相对来得低一些。
+
+#### 变量是堆（heap）还是堆栈（stack）
+
+官方给出的解释如下:
+
+```markdown
+How do I know whether a variable is allocated on the heap or the stack?
+From a correctness standpoint, you don't need to know. Each variable in Go exists as long as there are references to it. The storage location chosen by the implementation is irrelevant to the semantics of the language.
+
+The storage location does have an effect on writing efficient programs. When possible, the Go compilers will allocate variables that are local to a function in that function's stack frame. However, if the compiler cannot prove that the variable is not referenced after the function returns, then the compiler must allocate the variable on the garbage-collected heap to avoid dangling pointer errors. Also, if a local variable is very large, it might make more sense to store it on the heap rather than the stack.
+
+In the current compilers, if a variable has its address taken, that variable is a candidate for allocation on the heap. However, a basic escape analysis recognizes some cases when such variables will not live past the return from the function and can reside on the stack.
+```
+
+从上面可以了解到, 您不需要知道。Go中的每个变量都存在，只要有对它的引用即可。实现选择的存储位置与语言的语义无关。
+
+存储位置确实会影响编写高效的程序。如果可能，Go编译器将为该函数的堆栈帧中的函数分配本地变量。但是，如果编译器在函数返回后无法证明变量未被引用，则编译器必须在垃圾收集堆上分配变量以避免悬空指针错误。此外，如果局部变量非常大，将它存储在堆而不是堆栈上可能更有意义。
+
+在当前的编译器中，如果变量具有其地址，则该变量是堆上分配的候选变量。但是，基础的逃逸分析可以将那些生存不超过函数返回值的变量识别出来，并且因此可以分配在栈上。
+
+Go的编译器会决定在哪(堆or栈)分配内存，保证程序的正确性。
+
 #### Go的堆栈分配
 
 * 每个goroutine维护着一个栈空间，默认最大为4KB.
 * 当goroutine的栈空间不足时，golang会调用`runtime.morestack`(汇编实现：asm_xxx.s)来进行动态扩容.
-* 连续栈：当栈空间不足的时候申请一个2倍于当前大小的新栈，并把所有数据拷贝到新栈， 接下来的所有调用执行都发生在新栈上.
+* 连续栈是当栈空间不足的时候申请一个2倍于当前大小的新栈，并把所有数据拷贝到新栈,接下来的所有调用执行都发生在新栈上.
 * 每个function维护着各自的栈帧(stack frame)，当function退出时会释放栈帧.
 
-#### function内部的栈操作
+#### Go function内的栈操作
 
 用一段简单的代码来说明Go函数调用及传参时的栈操作：
 
@@ -60,6 +103,7 @@ func main() {
     0x001b 00027 (test_stack.go:10) ADDQ    $16, SP
     0x001f 00031 (test_stack.go:10) RET
 ```
+
 事实上，即便我定义了指针调用，以上的数据也都是在栈上拷贝的；那么Golang中的数据什么时候会被分配到堆上呢？
 
 #### Golang逃逸分析
@@ -102,7 +146,7 @@ func main() {
 
 那么，在什么时候指针对象才会逃逸呢？
 
-#### 按值传递和按址传递
+那就是在按值传递和按址传递时候.
 
 * 按值传递
 
@@ -190,7 +234,6 @@ func main() {
 * main()中的对象c，由于作为参数p传入g()后发生了逃逸，因此c也发生了逃逸.
 * 当然，如果定义ret.Data为int(instead of *int)的话，对象p也是不会逃逸的(执行了拷贝).
 
-
 #### 开发建议大对象按址传递，小对象按值传递
 
 * 按址传递更高效，按值传递更安全(from William Kennedy).
@@ -214,9 +257,10 @@ ret = &Result{}
 ...
 return ret
 ```
-对阅读代码也容易产生误导.
+对阅读代码也会容易产生误导.
 
 #### 参考链接
+
 * [Golang汇编快速指南](http://blog.rootk.com/post/golang-asm.html)
 * [Golang汇编](https://lrita.github.io/2017/12/12/golang-asm/#how)
 * [Golang汇编命令解读](http://www.cnblogs.com/yjf512/p/6132868.html)

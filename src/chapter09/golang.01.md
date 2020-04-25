@@ -1,6 +1,18 @@
-#### Golang内存分配
+#### Go内存管理
 
-1. 内存分配知识
+<p align="center">
+<img width="500" align="center" src="../images/109.jpg" />
+</p>
+
+Go内存管理基于TCMalloc，使用连续虚拟地址，以页(8k)为单位、多级缓存进行管理；在分配内存时，需要对size进行对齐处理，根据best-fit找到合适的mspan，对未用完的内存还会拆分成其他大小的mspan继续使用。
+
+在new一个object时(忽略逃逸分析)，根据object的size做不同的分配策略：
+
+* 极小对象(size<16byte)直接在当前P的mcache上的tiny缓存上分配;
+* 小对象(16byte <= size <= 32k)在当前P的mcache上对应slot的空闲列表中分配，无空闲列表则会继续向mcentral申请(还是没有则向mheap申请)；
+* 大对象(size>32k)直接通过mheap申请。
+
+#### 1. 内存分配知识
 
 * 计算机系统的主存被组织成一个由M个连续的字节大小的单元组成的数组，每个字节都有一个唯一的物理地址（PA）
 * 现代处理器使用的是一种为虚拟寻址（VA）的寻址形式，最少的寻址单位是字
@@ -10,9 +22,9 @@
 * page的结构与物理页相关，而非与虚拟页相关
 * 系统中的每个物理页都要分配一个page结构体
 
-在了解Go的内存分配器原理之前，我们先了解一下“动态存储分配器”.
+在了解Go的内存分配器原理之前，我们先了解一下“动态存储分配器”。
 
-2. 动态存储分配器
+#### 2. 动态存储分配器
 
 动态存储分配器维护着一个进程的虚拟存储区域，这个区域称为 “堆”，堆可以视为一组大小不同的 “块”（chunk: 连续的虚拟存储片，无论内存分配器和垃圾回收算法都依赖连续地址）的集合，并交由动态存储器维护。
 
@@ -72,20 +84,20 @@ _MaxSmallSize = 32 << 10
 ```
 从上面的代码段，我们大概可以指定若对象大小超出特定阈值限制，会被当做大对象特别对待。
 
-3 mmap函数
+#### 3. mmap函数
 
 Unix进程可以使用mmap函数来创建新的虚拟存储区域并将对象映射到这些区域中。
 
 mmap函数要求内核创建一个新的虚拟存储区域，最好是从起始地址start开始的一个区域，并将文件描述符fd指定的对象的一个连续的片（chunk）映射到新的区域。
 
-4. 数据频繁分配与回收
+#### 4. 数据频繁分配与回收
 
 对于有效地进行数据频繁分配与回收，减少碎片，一般有两种手段：
 
 * 空闲链表: 提供直接可供使用，已分配的结构块，缺点是不能全局控制.
 * slab：linux提供的，可以把不同的对象划分为所谓高速缓存组.
 
-5. Go的内存分配
+#### 5. Go的内存分配
 
 Go的内存分配器是采用google自家的tcmalloc，tcmalloc是一个带内存池的分配器，底层直接调用mmap函数，并使用bestfit进行动态分配。
 
@@ -105,7 +117,7 @@ Go内存分配主要组件：
 
 (2). 回收过程：回收一个Mspan时，首选查找它相邻的地址，再通过map映射得到对应的Mspan，如果Mspan的state是未使用，则可以将 两者进行合并。最后将这页或者合并后的页归还到free[]分配池或者large中。
 
-6. Go的内存模型
+#### 6. Go的内存模型
 
 Go的内存模型可以视为两级的内存模型：
 
@@ -165,12 +177,12 @@ func main() {
 ```
 当我们跟上面一样分析test的分配情况时：
 ```go
-go tool objdump -s "main\.patent" patent
+> go tool objdump -s "main\.patent" patent
 ```
 
 命令执行后，并没有输出, 我们分析下main方法:
 ```go
-go tool objdump -s "main\.main" patent
+> go tool objdump -s "main\.main" patent
 ```
 得到的结果如下：
 ```go
@@ -206,6 +218,7 @@ go tool objdump -s "main\.main" patent
 4、如果MHeap空或者没有足够大的页的情况下，从操作系统分配一组新的页面，一般在1MB以上
 
 Go分配流程核心源码实现：
+
 ```go
 func mallocgc(size uintptr, typ *_type, flags uint32) unsafe.Pointer {
     if gcphase == _GCmarktermination {
@@ -418,5 +431,3 @@ Go也有happens-before ,go happens-before常用的三原则是：
 * 对于不带缓冲区的channel，对其写happens-before对其读
 * 对于带缓冲区的channel,对其读happens-before对其写
 * 对于不带缓冲的channel的接收操作 happens-before 相应channel的发送操作完成
-
-
